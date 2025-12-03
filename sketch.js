@@ -16,8 +16,6 @@ let ryuAnimations = {
 };
 
 let bombFrames = [];
-
-// Sprite sheets
 let sheets = {};
 
 // Chun Li state
@@ -41,13 +39,17 @@ let ryu = {
   currentAnimation: "stay",
   frameIndex: 0,
   frameSpeed: 10,
-  isHit: false,
-  hitTimer: 0
 };
 
 let gravity = 0.8;
 let bombs = [];
 let score = 0;
+
+// Dialogue
+let showDialog = false;
+let playerInput = "";
+let ryuReply = "";
+let inputActive = false;
 
 function preload() {
   bg = loadImage("bg.png");
@@ -60,83 +62,90 @@ function preload() {
   sheets.chunJumpGround = loadImage("chun li/jump/ground/129x171.png");
   sheets.bomb = loadImage("chun li/bomb/56x32.png");
   
-  // 載入 Ryu sprite sheets
+  // Ryu
   sheets.ryuStay = loadImage("ryu/stay/118x186.png");
   sheets.ryuHit = loadImage("ryu/hit/165x165.png");
 }
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  
-  // 切割 Chun Li 動畫
+
+  // 切割 Chun Li
   cutFrames(sheets.chunStay, 131, 171, chunLiAnimations.stay);
   cutFrames(sheets.chunWalk, 123, 195, chunLiAnimations.walk);
   cutFrames(sheets.chunAttack, 208, 158, chunLiAnimations.attack);
   cutFrames(sheets.chunJumpAir, 103, 214, chunLiAnimations.jumpAir);
   cutFrames(sheets.chunJumpGround, 129, 171, chunLiAnimations.jumpGround);
   cutFrames(sheets.bomb, 56, 32, bombFrames);
-  
-  // 切割 Ryu 動畫
+
+  // Ryu
   cutFrames(sheets.ryuStay, 118, 186, ryuAnimations.stay);
   cutFrames(sheets.ryuHit, 165, 165, ryuAnimations.hit);
-  
-  // 調整角色起始位置（螢幕下方）
+
+  // 起始位置
   chunLi.y = height - 200;
   ryu.y = height - 200;
-  ryu.x = width/2;
+  ryu.x = width / 2;
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   chunLi.y = height - 200;
   ryu.y = height - 200;
-  ryu.x = width/2;
+  ryu.x = width / 2;
 }
 
 function draw() {
-  // 繪製背景（保持比例填滿畫面）
-  let bgAspect = bg.width / bg.height;
-  let canvasAspect = width / height;
-  
-  if (bgAspect > canvasAspect) {
-    let newHeight = height;
-    let newWidth = newHeight * bgAspect;
-    image(bg, (width - newWidth) / 2, 0, newWidth, newHeight);
-  } else {
-    let newWidth = width;
-    let newHeight = newWidth / bgAspect;
-    image(bg, 0, (height - newHeight) / 2, newWidth, newHeight);
-  }
+  drawBackgroundCover(bg);
 
-  // 更新 Chun Li
+  // Movement & Animations
   handleChunLiMovement();
   applyChunLiJump();
   updateChunLiAnimation();
-  
-  // 更新 Ryu
+
   updateRyuFacing();
   updateRyuAnimation();
-  
-  // 更新炸彈和碰撞檢測
+
   updateBombs();
-  
-  // 繪製角色
+
+  // Draw characters
   drawChunLi();
   drawRyu();
-  
-  // 顯示分數
+
+  // Dialogue
+  handleDialogue();
+
   drawScore();
 }
 
+// ----------- Background cover (保持比例填滿) -----------
+function drawBackgroundCover(img) {
+  let imgRatio = img.width / img.height;
+  let canvasRatio = width / height;
+  let w, h;
+
+  if (canvasRatio > imgRatio) {
+    w = width;
+    h = width / imgRatio;
+  } else {
+    h = height;
+    w = height * imgRatio;
+  }
+
+  imageMode(CENTER);
+  image(img, width / 2, height / 2, w, h);
+}
+
+// ----------- Frame cutting -----------
 function cutFrames(sheet, w, h, array) {
   let count = floor(sheet.width / (w + 5));
-  
   for (let i = 0; i < count; i++) {
     let imgFrame = sheet.get(i * (w + 5), 0, w, h);
     array.push(imgFrame);
   }
 }
 
+// ----------- Draw Chun Li -----------
 function drawChunLi() {
   let index = floor(chunLi.frameIndex / chunLi.frameSpeed);
   index = index % chunLiAnimations[chunLi.currentAnimation].length;
@@ -149,6 +158,7 @@ function drawChunLi() {
   pop();
 }
 
+// ----------- Draw Ryu -----------
 function drawRyu() {
   let index = floor(ryu.frameIndex / ryu.frameSpeed);
   index = index % ryuAnimations[ryu.currentAnimation].length;
@@ -161,6 +171,7 @@ function drawRyu() {
   pop();
 }
 
+// ----------- Chun Li movement -----------
 function handleChunLiMovement() {
   chunLi.vx = 0;
 
@@ -183,6 +194,7 @@ function handleChunLiMovement() {
   chunLi.x = constrain(chunLi.x, 50, width - 50);
 }
 
+// ----------- Chun Li animation update -----------
 function updateChunLiAnimation() {
   chunLi.frameIndex += 1;
   if (chunLi.frameIndex >= chunLiAnimations[chunLi.currentAnimation].length * chunLi.frameSpeed) {
@@ -191,35 +203,42 @@ function updateChunLiAnimation() {
   }
 }
 
+// ----------- Ryu face Chun Li -----------
 function updateRyuFacing() {
-  // Ryu 面對 Chun Li
-  if (chunLi.x < ryu.x) {
-    ryu.facing = -1;
-  } else {
-    ryu.facing = 1;
-  }
+  ryu.facing = (chunLi.x < ryu.x) ? -1 : 1;
 }
 
+// ----------- Ryu animation update -----------
 function updateRyuAnimation() {
   ryu.frameIndex += 1;
-  
-  if (ryu.isHit) {
-    ryu.currentAnimation = "hit";
-    ryu.hitTimer--;
-    
-    if (ryu.hitTimer <= 0) {
-      ryu.isHit = false;
-      ryu.currentAnimation = "stay";
-      ryu.frameIndex = 0;
-    }
-  }
-  
+
   if (ryu.frameIndex >= ryuAnimations[ryu.currentAnimation].length * ryu.frameSpeed) {
     ryu.frameIndex = 0;
+    // 受擊動畫播放完後回到待機
+    if (ryu.currentAnimation === "hit") {
+      ryu.currentAnimation = "stay";
+    }
   }
 }
 
+// ----------- Key pressed (jump & attack & input) -----------
 function keyPressed() {
+  // Dialogue input (優先處理)
+  if (inputActive) {
+    if (keyCode === ENTER) {
+      if (playerInput.trim() !== "") {
+        ryuReply = playerInput + " 歡迎你！";
+        playerInput = "";
+        inputActive = false;
+      }
+    } else if (keyCode === BACKSPACE) {
+      playerInput = playerInput.slice(0, -1);
+    } else if (key.length === 1 && keyCode !== 32) {
+      playerInput += key;
+    }
+    return; // 輸入時阻止其他按鍵動作
+  }
+
   // Jump
   if ((keyCode === UP_ARROW || key === "w" || key === "W") && !chunLi.isJumping) {
     chunLi.isJumping = true;
@@ -231,17 +250,17 @@ function keyPressed() {
   if (key === " ") {
     chunLi.currentAnimation = "attack";
     chunLi.frameIndex = 0;
-    
-    // 發射炸彈
-    bombs.push({ 
-      x: chunLi.x + (chunLi.facing * 50), 
-      y: chunLi.y - 40, 
+
+    bombs.push({
+      x: chunLi.x + (chunLi.facing * 50),
+      y: chunLi.y - 40,
       vx: 12 * chunLi.facing,
       facing: chunLi.facing
     });
   }
 }
 
+// ----------- Jump physics -----------
 function applyChunLiJump() {
   if (chunLi.isJumping) {
     chunLi.y += chunLi.vy;
@@ -258,23 +277,23 @@ function applyChunLiJump() {
   }
 }
 
+// ----------- Bombs & collision -----------
 function updateBombs() {
   for (let i = bombs.length - 1; i >= 0; i--) {
     let b = bombs[i];
     b.x += b.vx;
-    
-    // 檢測與 Ryu 的碰撞
+
+    // 立即判定碰撞，觸發受擊動畫
     let distance = dist(b.x, b.y, ryu.x, ryu.y);
-    if (distance < 60 && !ryu.isHit) {
-      ryu.isHit = true;
-      ryu.hitTimer = 30; // 受擊動畫持續時間
+    if (distance < 60) {
+      ryu.currentAnimation = "hit";
       ryu.frameIndex = 0;
       score++;
       bombs.splice(i, 1);
       continue;
     }
-    
-    // 繪製炸彈（根據方向翻轉）
+
+    // Draw bomb
     let frame = bombFrames[floor(chunLi.frameIndex / chunLi.frameSpeed) % bombFrames.length];
     push();
     translate(b.x, b.y);
@@ -282,14 +301,65 @@ function updateBombs() {
     imageMode(CENTER);
     image(frame, 0, 0);
     pop();
-    
-    // 移除超出畫面的炸彈
+
     if (b.x < -50 || b.x > width + 50) {
       bombs.splice(i, 1);
     }
   }
 }
 
+// ----------- Dialogue logic -----------
+function handleDialogue() {
+  let d = dist(chunLi.x, chunLi.y, ryu.x, ryu.y);
+
+  if (d < 200) {
+    showDialog = true;
+    if (!ryuReply) inputActive = true;
+    drawDialogueBox();
+  } else {
+    showDialog = false;
+    inputActive = false;
+    playerInput = "";
+    ryuReply = "";
+  }
+}
+
+function drawDialogueBox() {
+  push();
+  textAlign(CENTER);
+  textSize(16);
+  
+  // ---- Ryu 對話框 ----
+  fill(255, 255, 255, 230);
+  stroke(0);
+  strokeWeight(2);
+  rect(ryu.x - 80, ryu.y - 150, 160, 30, 10);
+  
+  noStroke();
+  fill(0);
+  
+  if (ryuReply) {
+    text(ryuReply, ryu.x, ryu.y - 130);
+  } else {
+    text("請問你叫什麼名字？", ryu.x, ryu.y - 130);
+  }
+  
+  // ---- Chun Li 輸入框 (只在輸入時顯示) ----
+  if (inputActive) {
+    fill(255, 255, 255, 230);
+    stroke(0);
+    strokeWeight(2);
+    rect(chunLi.x - 80, chunLi.y - 150, 160, 30, 10);
+    
+    noStroke();
+    fill(0);
+    text(playerInput + "|", chunLi.x, chunLi.y - 130);
+  }
+  
+  pop();
+}
+
+// ----------- Score -----------
 function drawScore() {
   push();
   fill(255);
